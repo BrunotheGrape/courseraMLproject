@@ -1,0 +1,169 @@
+---
+title: "Analysis of WLE Data"
+author: "Boyd Ingalls"
+date: "June 18, 2016"
+output: html_document
+---
+
+This exercise is an attempt to predict outcomes from an HAR dataset. HAR is an acronym for Human Activity Recognition. HAR can be applied to exercises routines designed to maintain or improve physical fitness. The dataset we look at comes out of work by Wallace Ugulino (wugulino at inf dot puc-rio dot br), Eduardo Velloso, Hugo Fuks (Read more: http://groupware.les.inf.puc-rio.br/har#collaborators#ixzz4C4TzAukX) to design a protocol to measure the quality of an exercise routine and provide feedback to the subject on their technique. The experiment is described as follows:
+  
+  "Six young health participants were asked to perform one set of 10 repetitions of the Unilateral Dumbbell Biceps Curl in five different fashions: exactly according to the specification (Class A), throwing the elbows to the front (Class B), lifting the dumbbell only halfway (Class C), lowering the dumbbell only halfway (Class D) and throwing the hips to the front (Class E).
+(Read more: http://groupware.les.inf.puc-rio.br/har#collaborators#ixzz4C4UqG8Us)"
+
+The experimenters designed four wearable sensors which the subjects wore as follows: waist, left thigh, right ankle, and right arm.
+
+The object of the R code that follows is to predict the class based on data supplied by the sensors. The training data set can be found at https://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv. The test dataset can be found at https://d396qusza40orc.cloudfront.net/predmachlearn/pml-testing.csv
+
+
+I use the following code to read in the datasets directly from the website.
+
+```{r}
+DataTr <- read.csv("https://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv")
+DataTst <- read.csv("https://d396qusza40orc.cloudfront.net/predmachlearn/pml-testing.csv")
+```
+DataTr is the data that I'll train on. DataTst is a test set with the predicted variable (dependent variable) removed.
+The DataTr dataset tracks 160 variables. However 59 variables contain no data in the DataTst so I left those variables out of my prediction model. I chose to discard any variables that were not sensor measurements or derived form measurements. I am left with 49 variables which contain data developed by the sensors and the dependent variable making 50 variables in all.
+
+I set the seed at 353 for reproducibility and load the caret, dplyr, ggplot2, kernlab, MASS, and e1071 packages
+
+```{r}
+set.seed(353)
+library(caret); library(dplyr); library(ggplot2); library(kernlab); library(MASS)
+library(e1071)
+```
+
+I now subset the DataTr for the variables I'm interested in. This leaves me with 49 predictor variables and one predicted value in my dataset.
+
+```{r}
+DataTr <- dplyr::select(DataTr, roll_belt, pitch_belt, yaw_belt, total_accel_belt,
+                 gyros_belt_x, gyros_belt_y, gyros_belt_z,
+                 accel_belt_x, accel_belt_y, accel_belt_z,
+                 magnet_belt_x, magnet_belt_y, magnet_belt_z,
+                 roll_arm, pitch_arm, yaw_arm, total_accel_arm,
+                 gyros_arm_x, gyros_arm_y, gyros_arm_z,
+                 magnet_arm_x, magnet_arm_y, magnet_arm_z,
+                 roll_dumbbell, pitch_dumbbell, yaw_dumbbell, total_accel_dumbbell,
+                 gyros_dumbbell_x, gyros_dumbbell_y, gyros_dumbbell_z, 
+                 accel_dumbbell_x, accel_dumbbell_y, accel_dumbbell_z,
+                 magnet_dumbbell_x, magnet_dumbbell_y, magnet_dumbbell_z,
+                 roll_forearm, pitch_forearm, pitch_forearm, yaw_forearm,
+                 total_accel_forearm,
+                 gyros_forearm_x, gyros_forearm_y, gyros_forearm_z, 
+                 accel_forearm_x, accel_forearm_y, accel_forearm_z, 
+                 magnet_forearm_x, magnet_forearm_y, magnet_forearm_z, classe)
+```
+
+I now partition DataTr creating a training set with 70% of the data. The remaining data becomes my test set.
+
+
+```{r}
+spTraining <- createDataPartition(DataTr$classe,
+                                  p=0.70, list=FALSE)
+spTrain <- DataTr[ spTraining,]
+spTest <- DataTr[-spTraining, ]
+```
+I chose to code several models and compare them for best results. I used trainControl to train some of my models on k fold crossvalidation. For purposes of comparison I created 5k, 10k, and 15k crossvalidation models.
+
+```{r}
+train_control5<- trainControl(method="cv", number=5,  classProbs = TRUE)
+train_control10<- trainControl(method="cv", number=10, classProbs = TRUE)
+train_control15<- trainControl(method="cv", number=15, classProbs = TRUE)
+```
+
+I then trained 6 models; 3 generalized boosted regression models utilizing cross validation, a naive Bayes utilizing cross validation, a random forest, and a recursive partitioning model.
+
+Do to limited resources on my laptop computer knitter was unable to process all of my code. I have limited my code blocks from this point to the random forest which gave the best results. But I have included the code outside of code blocks below.
+
+
+kfGbm5 <- train(classe ~ ., data = spTrain,
+                 method = "gbm",
+                 trControl = train_control5,
+                 verbose = FALSE)
+
+kfGbm10 <- train(classe ~ ., data = spTrain,
+                 method = "gbm",
+                 trControl = train_control10,
+                 verbose = FALSE)
+                 
+kfGbm15 <- train(classe ~ ., data = spTrain,
+                 method = "gbm",
+                 trControl = train_control15,
+                 verbose = FALSE)
+
+
+nbFit <- naiveBayes(classe~., data = spTrain, trControl = train_control10,
+                    verbose = FALSE)
+
+```{r}
+rf.fit <- train(classe ~., method = "rf", data = spTrain)
+```
+
+rpart.fit <- train(classe ~., method = "rpart", data = spTrain)
+
+
+The resulting models can be summarized as follows:
+
+The GBM models all had the same parameters. The final values used for the model were n.trees = 150, interaction.depth = 3, shrinkage = 0.1 and n.minobsinnode = 10. 
+
+The naive Bayes model is summarized as follows:
+
+Call:
+naiveBayes.default(x = X, y = Y, laplace = laplace, trControl = ..1, verbose = FALSE)
+A-priori probabilities:
+Y
+        A         B         C         D         E 
+0.2843416 0.1934920 0.1744195 0.1639368 0.1838101 
+
+The random forest model is follows:
+
+Resampling: Bootstrapped (25 reps) 
+Resampling results across tuning parameters:
+  mtry  Accuracy   Kappa    
+   2    0.9886647  0.9856522
+  25    0.9879366  0.9847309
+  49    0.9788767  0.9732622
+
+And finally, the recursive partitioning model as follows:
+
+Resampling: Bootstrapped (25 reps) 
+Resampling results across tuning parameters:
+  cp         Accuracy   Kappa     
+  0.0346862  0.5132151  0.36622278
+  0.0597769  0.3979164  0.17747569
+  0.1160614  0.3338755  0.07533155
+
+The predictions are coded as follows:
+
+predkfGbm5 <- predict(kfGbm5, spTest)
+table(predkfGbm5, spTest$classe)
+
+predkfGbm10 <- predict(kfGbm10, spTest)
+table(predkfGbm10, spTest$classe)
+
+predkfGbm15 <- predict(kfGbm15, spTest)
+table(predkfGbm15, spTest$classe)
+
+prednbFit <- predict(nbFit, spTest)
+table(prednbFit, spTest$classe)
+
+predrpart.fit <- predict(rpart.fit, spTest)
+table(predrpart.fit, spTest$classe)
+
+```{r}
+predrf.fit <- predict(rf.fit, spTest)
+table(predrf.fit, spTest$classe)
+```
+
+The gbm models all had similar results. 5 k model was correct on 96.1% of predictions, the 10 k on 95.6%, and the 15 k on 95.7% on the test portion of DataTr. The naive Bayes model had very poor results getting only 48.0% of the predictions correct. The recursive partitioning model faired little better getting 49.6% of the predictions correct. The random forest method produced the best results getting 99.1% of the predictions correct.
+
+I chose the random forest model to predict DataTst. The random forest was able to predict 100% of the outcomes for the test data.
+
+
+
+
+Sources:
+
+Velloso, E.; Bulling, A.; Gellersen, H.; Ugulino, W.; Fuks, H. Qualitative Activity Recognition of Weight Lifting Exercises. Proceedings of 4th International Conference in Cooperation with SIGCHI (Augmented Human '13) . Stuttgart, Germany: ACM SIGCHI, 2013.
+
+
+
